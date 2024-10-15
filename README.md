@@ -14,7 +14,7 @@
 
 <br>
 
-_MediaMTX_ (formerly _rtsp-simple-server_) is a ready-to-use and zero-dependency real-time media server and media proxy that allows to publish, read, proxy, record and playback video and audio streams. It has been conceived as a "media router" that routes media streams from one end to the other.
+_MediaMTX_ is a ready-to-use and zero-dependency real-time media server and media proxy that allows to publish, read, proxy, record and playback video and audio streams. It has been conceived as a "media router" that routes media streams from one end to the other.
 
 Live streams can be published to the server with:
 
@@ -22,27 +22,27 @@ Live streams can be published to the server with:
 |--------|--------|------------|------------|
 |[SRT clients](#srt-clients)||H265, H264, MPEG-4 Video (H263, Xvid), MPEG-1/2 Video|Opus, MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), AC-3|
 |[SRT cameras and servers](#srt-cameras-and-servers)||H265, H264, MPEG-4 Video (H263, Xvid), MPEG-1/2 Video|Opus, MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), AC-3|
-|[WebRTC clients](#webrtc-clients)|Browser-based, WHIP|AV1, VP9, VP8, H265, H264|Opus, G722, G711 (PCMA, PCMU)|
+|[WebRTC clients](#webrtc-clients)|WHIP|AV1, VP9, VP8, H265, H264|Opus, G722, G711 (PCMA, PCMU)|
 |[WebRTC servers](#webrtc-servers)|WHEP|AV1, VP9, VP8, H265, H264|Opus, G722, G711 (PCMA, PCMU)|
 |[RTSP clients](#rtsp-clients)|UDP, TCP, RTSPS|AV1, VP9, VP8, H265, H264, MPEG-4 Video (H263, Xvid), MPEG-1/2 Video, M-JPEG and any RTP-compatible codec|Opus, MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), AC-3, G726, G722, G711 (PCMA, PCMU), LPCM and any RTP-compatible codec|
 |[RTSP cameras and servers](#rtsp-cameras-and-servers)|UDP, UDP-Multicast, TCP, RTSPS|AV1, VP9, VP8, H265, H264, MPEG-4 Video (H263, Xvid), MPEG-1/2 Video, M-JPEG and any RTP-compatible codec|Opus, MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), AC-3, G726, G722, G711 (PCMA, PCMU), LPCM and any RTP-compatible codec|
 |[RTMP clients](#rtmp-clients)|RTMP, RTMPS, Enhanced RTMP|AV1, VP9, H265, H264|MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), G711 (PCMA, PCMU), LPCM|
-|[RTMP cameras and servers](#rtmp-cameras-and-servers)|RTMP, RTMPS, Enhanced RTMP|H264|MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3)|
+|[RTMP cameras and servers](#rtmp-cameras-and-servers)|RTMP, RTMPS, Enhanced RTMP|AV1, VP9, H265, H264|MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), G711 (PCMA, PCMU), LPCM|
 |[HLS cameras and servers](#hls-cameras-and-servers)|Low-Latency HLS, MP4-based HLS, legacy HLS|AV1, VP9, H265, H264|Opus, MPEG-4 Audio (AAC)|
 |[UDP/MPEG-TS](#udpmpeg-ts)|Unicast, broadcast, multicast|H265, H264, MPEG-4 Video (H263, Xvid), MPEG-1/2 Video|Opus, MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), AC-3|
 |[Raspberry Pi Cameras](#raspberry-pi-cameras)||H264||
 
-And can be read from the server with:
+Live streams can be read from the server with:
 
 |protocol|variants|video codecs|audio codecs|
 |--------|--------|------------|------------|
 |[SRT](#srt)||H265, H264, MPEG-4 Video (H263, Xvid), MPEG-1/2 Video|Opus, MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), AC-3|
-|[WebRTC](#webrtc)|Browser-based, WHEP|AV1, VP9, VP8, H264|Opus, G722, G711 (PCMA, PCMU)|
+|[WebRTC](#webrtc)|WHEP|AV1, VP9, VP8, H264|Opus, G722, G711 (PCMA, PCMU)|
 |[RTSP](#rtsp)|UDP, UDP-Multicast, TCP, RTSPS|AV1, VP9, VP8, H265, H264, MPEG-4 Video (H263, Xvid), MPEG-1/2 Video, M-JPEG and any RTP-compatible codec|Opus, MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3), AC-3, G726, G722, G711 (PCMA, PCMU), LPCM and any RTP-compatible codec|
 |[RTMP](#rtmp)|RTMP, RTMPS, Enhanced RTMP|H264|MPEG-4 Audio (AAC), MPEG-1/2 Audio (MP3)|
 |[HLS](#hls)|Low-Latency HLS, MP4-based HLS, legacy HLS|AV1, VP9, H265, H264|Opus, MPEG-4 Audio (AAC)|
 
-And can be recorded and played back with:
+Live streams be recorded and played back with:
 
 |format|video codecs|audio codecs|
 |------|------------|------------|
@@ -83,6 +83,7 @@ _rtsp-simple-server_ has been rebranded as _MediaMTX_. The reason is pretty obvi
     * [GStreamer](#gstreamer)
     * [OBS Studio](#obs-studio)
     * [OpenCV](#opencv)
+    * [Unity](#unity)
     * [Web browsers](#web-browsers)
   * [By device](#by-device)
     * [Generic webcam](#generic-webcam)
@@ -103,6 +104,7 @@ _rtsp-simple-server_ has been rebranded as _MediaMTX_. The reason is pretty obvi
     * [FFmpeg](#ffmpeg-1)
     * [GStreamer](#gstreamer-1)
     * [VLC](#vlc)
+    * [Unity](#unity-1)
     * [Web browsers](#web-browsers-1)
   * [By protocol](#by-protocol-1)
     * [SRT](#srt)
@@ -144,8 +146,8 @@ _rtsp-simple-server_ has been rebranded as _MediaMTX_. The reason is pretty obvi
     * [Encryption](#encryption-1)
 * [Compile from source](#compile-from-source)
   * [Standard](#standard)
-  * [Raspberry Pi](#raspberry-pi)
   * [OpenWrt](#openwrt-1)
+  * [Custom libcamera](#custom-libcamera)
   * [Cross compile](#cross-compile)
   * [Compile for all supported platforms](#compile-for-all-supported-platforms)
 * [License](#license)
@@ -183,7 +185,7 @@ Available images:
 |bluenviron/mediamtx:latest-rpi|:x:|:heavy_check_mark:|
 |bluenviron/mediamtx:latest-ffmpeg-rpi|:heavy_check_mark:|:heavy_check_mark:|
 
-The `--network=host` flag is mandatory since Docker can change the source port of UDP packets for routing reasons, and this doesn't allow the RTSP server to identify the senders of the packets. This issue can be avoided by disabling the UDP transport protocol:
+The `--network=host` flag is mandatory for RTSP to work, since Docker can change the source port of UDP packets for routing reasons, and this doesn't allow the server to identify the senders of the packets. This issue can be avoided by disabling the RTSP UDP transport protocol:
 
 ```
 docker run --rm -it \
@@ -347,7 +349,7 @@ The resulting stream will be available in path `/mystream`.
 
 #### OpenCV
 
-OpenCV can publish to the server through its GStreamer plugin, as a [RTSP client](#rtsp-clients). It must be compiled with GStreamer support, by following this procedure:
+Software which uses the OpenCV library can publish to the server through its GStreamer plugin, as a [RTSP client](#rtsp-clients). It must be compiled with GStreamer support, by following this procedure:
 
 ```sh
 sudo apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-ugly gstreamer1.0-rtsp python3-dev python3-numpy
@@ -367,7 +369,7 @@ python3 -c 'import cv2; print(cv2.getBuildInformation())'
 
 Check that the output contains `GStreamer: YES`.
 
-Videos can be published with `VideoWriter`:
+Videos can be published with `cv2.VideoWriter`:
 
 ```python
 from datetime import datetime
@@ -420,6 +422,117 @@ while True:
 
 The resulting stream will be available in path `/mystream`.
 
+#### Unity
+
+Software written with the Unity Engine can publish a stream to the server by using the [WebRTC protocol](#webrtc).
+
+Create a new Unity project or open an existing open.
+
+Open _Window -> Package Manager_, click on the plus sign, _Add Package by name..._ and insert `com.unity.webrtc`. Wait for the package to be installed.
+
+In the _Project_ window, under `Assets`, create a new C# Script called `WebRTCPublisher.cs` with this content:
+
+```cs
+using System.Collections;
+using UnityEngine;
+using Unity.WebRTC;
+using UnityEngine.Networking;
+
+public class WebRTCPublisher : MonoBehaviour
+{
+    public string url = "http://localhost:8889/unity/whip";
+    public int videoWidth = 1280;
+    public int videoHeight = 720;
+
+    private RTCPeerConnection pc;
+    private MediaStream videoStream;
+
+    void Start()
+    {
+        pc = new RTCPeerConnection();
+        Camera sourceCamera = gameObject.GetComponent<Camera>();
+        videoStream = sourceCamera.CaptureStream(videoWidth, videoHeight);
+        foreach (var track in videoStream.GetTracks())
+        {
+            pc.AddTrack(track);
+        }
+
+        StartCoroutine(WebRTC.Update());
+        StartCoroutine(createOffer());
+    }
+
+    private IEnumerator createOffer()
+    {
+        var op = pc.CreateOffer();
+        yield return op;
+        if (op.IsError) {
+            Debug.LogError("CreateOffer() failed");
+            yield break;
+        }
+
+        yield return setLocalDescription(op.Desc);
+    }
+
+    private IEnumerator setLocalDescription(RTCSessionDescription offer)
+    {
+        var op = pc.SetLocalDescription(ref offer);
+        yield return op;
+        if (op.IsError) {
+            Debug.LogError("SetLocalDescription() failed");
+            yield break;
+        }
+
+        yield return postOffer(offer);
+    }
+
+    private IEnumerator postOffer(RTCSessionDescription offer)
+    {
+        var content = new System.Net.Http.StringContent(offer.sdp);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/sdp");
+        var client = new System.Net.Http.HttpClient();
+
+        var task = System.Threading.Tasks.Task.Run(async () => {
+            var res = await client.PostAsync(new System.UriBuilder(url).Uri, content);
+            res.EnsureSuccessStatusCode();
+            return await res.Content.ReadAsStringAsync();
+        });
+        yield return new WaitUntil(() => task.IsCompleted);
+        if (task.Exception != null) {
+            Debug.LogError(task.Exception);
+            yield break;
+        }
+
+        yield return setRemoteDescription(task.Result);
+    }
+
+    private IEnumerator setRemoteDescription(string answer)
+    {
+        RTCSessionDescription desc = new RTCSessionDescription();
+        desc.type = RTCSdpType.Answer;
+        desc.sdp = answer;
+        var op = pc.SetRemoteDescription(ref desc);
+        yield return op;
+        if (op.IsError) {
+            Debug.LogError("SetRemoteDescription() failed");
+            yield break;
+        }
+
+        yield break;
+    }
+
+    void OnDestroy()
+    {
+        pc?.Close();
+        pc?.Dispose();
+        videoStream?.Dispose();
+    }
+}
+```
+
+In the _Hierarchy_ window, find or create a scene and a camera, then add the `WebRTCPublisher.cs` script as component of the camera, by dragging it inside the _Inspector_ window. then Press the _Play_ button at the top of the page.
+
+The resulting stream will be available in path `/unity`.
+
 #### Web browsers
 
 Web browsers can publish a stream to the server by using the [WebRTC protocol](#webrtc). Start the server and open the web page:
@@ -442,21 +555,21 @@ For more advanced setups, you can create and serve a custom web page by starting
 
 #### Generic webcam
 
-If the OS is Linux-based, edit `mediamtx.yml` and replace everything inside section `paths` with the following content:
+If the operating system is Linux-based, edit `mediamtx.yml` and replace everything inside section `paths` with the following content:
 
 ```yml
 paths:
   cam:
-    runOnInit: ffmpeg -f v4l2 -i /dev/video0 -pix_fmt yuv420p -preset ultrafast -b:v 600k -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnInit: ffmpeg -f v4l2 -i /dev/video0 -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
     runOnInitRestart: yes
 ```
 
-If the OS is Windows:
+If the operating system is Windows:
 
 ```yml
 paths:
   cam:
-    runOnInit: ffmpeg -f dshow -i video="USB2.0 HD UVC WebCam" -pix_fmt yuv420p -c:v libx264 -preset ultrafast -b:v 600k -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnInit: ffmpeg -f dshow -i video="USB2.0 HD UVC WebCam" -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
     runOnInitRestart: yes
 ```
 
@@ -470,22 +583,22 @@ The resulting stream will be available in path `/cam`.
 
 #### Raspberry Pi Cameras
 
-_MediaMTX_ natively supports the Raspberry Pi Camera, enabling high-quality and low-latency video streaming from the camera to any user, for any purpose. There are a couple of requirements:
+_MediaMTX_ natively supports most of the Raspberry Pi Camera models, enabling high-quality and low-latency video streaming from the camera to any user, for any purpose. There are a couple of requirements:
 
-1. The server must run on a Raspberry Pi, with Raspberry Pi OS bullseye or newer as operative system. Both 32 bit and 64 bit operative systems are supported.
+1. The server must run on a Raspberry Pi, with one of the following operating systems:
 
-2. Make sure that the legacy camera stack is disabled. Type `sudo raspi-config`, then go to `Interfacing options`, `enable/disable legacy camera support`, choose `no`. Reboot the system.
+   * Raspberry Pi OS Bookworm
+   * Raspberry Pi OS Bullseye
+
+   Both 32 bit and 64 bit architectures are supported.
+
+2. If you are using Raspberry Pi OS Bullseye, make sure that the legacy camera stack is disabled. Type `sudo raspi-config`, then go to `Interfacing options`, `enable/disable legacy camera support`, choose `no`. Reboot the system.
 
 If you want to run the standard (non-Docker) version of the server:
 
-1. Make sure that the following packages are installed:
+1. Download the server executable. If you're using 64-bit version of the operative system, make sure to pick the `arm64` variant.
 
-   * `libcamera0` (&ge; 0.0.5)
-   * `libfreetype6`
-
-2. download the server executable. If you're using 64-bit version of the operative system, make sure to pick the `arm64` variant.
-
-3. edit `mediamtx.yml` and replace everything inside section `paths` with the following content:
+2. Edit `mediamtx.yml` and replace everything inside section `paths` with the following content:
 
    ```yml
    paths:
@@ -495,7 +608,7 @@ If you want to run the standard (non-Docker) version of the server:
 
 The resulting stream will be available in path `/cam`.
 
-If you want to run the server inside Docker, you need to use the `latest-rpi` image (that already contains required libraries) and launch the container with some additional flags:
+If you want to run the server inside Docker, you need to use the `latest-rpi` image and launch the container with some additional flags:
 
 ```sh
 docker run --rm -it \
@@ -507,7 +620,7 @@ docker run --rm -it \
 bluenviron/mediamtx:latest-rpi
 ```
 
-Be aware that the Docker image is not compatible with cameras that requires a custom `libcamera` (like some ArduCam products), since it comes with a standard `libcamera` included.
+Be aware that the server is not compatible with cameras that requires a custom `libcamera` (like some ArduCam products), since it comes with a bundled `libcamera`. If you want to use a custom one, you can [compile from source](#custom-libcamera).
 
 Camera settings can be changed by using the `rpiCamera*` parameters:
 
@@ -544,19 +657,20 @@ default:CARD=U0x46d0x809
     Default Audio Device
 ```
 
-Find the audio card of the microfone and take note of its name, for instance `default:CARD=U0x46d0x809`. Then use GStreamer inside `runOnReady` to read the video stream, add audio and publish the new stream to another path:
+Find the audio card of the microfone and take note of its name, for instance `default:CARD=U0x46d0x809`. Then create a new path that takes the video stream from the camera and audio from the microphone:
 
 ```yml
 paths:
   cam:
     source: rpiCamera
-    runOnReady: >
+
+  cam_with_audio:
+    runOnInit: >
       gst-launch-1.0
       rtspclientsink name=s location=rtsp://localhost:$RTSP_PORT/cam_with_audio
-      rtspsrc location=rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH latency=0 ! rtph264depay ! s.
+      rtspsrc location=rtsp://127.0.0.1:$RTSP_PORT/cam latency=0 ! rtph264depay ! s.
       alsasrc device=default:CARD=U0x46d0x809 ! opusenc bitrate=16000 ! s.
-    runOnReadyRestart: yes
-  cam_with_audio:
+    runOnInitRestart: yes
 ```
 
 The resulting stream will be available in path `/cam_with_audio`.
@@ -616,7 +730,7 @@ Regarding authentication, read [Authenticating with WHIP/WHEP](#authenticating-w
 
 Depending on the network it may be difficult to establish a connection between server and clients, read [Solving WebRTC connectivity issues](#solving-webrtc-connectivity-issues).
 
-Known clients that can publish with WebRTC and WHIP are [FFmpeg](#ffmpeg), [GStreamer](#gstreamer), [OBS Studio](#obs-studio).
+Known clients that can publish with WebRTC and WHIP are [FFmpeg](#ffmpeg), [GStreamer](#gstreamer), [OBS Studio](#obs-studio), [Unity](#unity) and [Web browsers](#web-browsers).
 
 #### WebRTC servers
 
@@ -713,7 +827,7 @@ The resulting stream will be available in path `/proxied`.
 
 The server supports ingesting UDP/MPEG-TS packets (i.e. MPEG-TS packets sent with UDP). Packets can be unicast, broadcast or multicast. For instance, you can generate a multicast UDP/MPEG-TS stream with GStreamer:
 
-```
+```sh
 gst-launch-1.0 -v mpegtsmux name=mux alignment=1 ! udpsink host=238.0.0.1 port=1234 \
 videotestsrc ! video/x-raw,width=1280,height=720,format=I420 ! x264enc speed-preset=ultrafast bitrate=3000 key-int-max=60 ! video/x-h264,profile=high ! mux. \
 audiotestsrc ! audioconvert ! avenc_aac ! mux.
@@ -721,9 +835,9 @@ audiotestsrc ! audioconvert ! avenc_aac ! mux.
 
 or FFmpeg:
 
-```
+```sh
 ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 \
--pix_fmt yuv420p -c:v libx264 -preset ultrafast -b:v 600k \
+-c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k \
 -f mpegts udp://238.0.0.1:1234?pkt_size=1316
 ```
 
@@ -812,6 +926,138 @@ snap install vlc
 
 At the moment VLC doesn't support reading encrypted RTSP streams. However, you can use a proxy like [stunnel](https://www.stunnel.org) or [nginx](https://nginx.org/) or a local _MediaMTX_ instance to decrypt streams before reading them.
 
+#### Unity
+
+Software written with the Unity Engine can read a stream from the server by using the [WebRTC protocol](#webrtc).
+
+Create a new Unity project or open an existing open.
+
+Open _Window -> Package Manager_, click on the plus sign, _Add Package by name..._ and insert `com.unity.webrtc`. Wait for the package to be installed.
+
+In the _Project_ window, under `Assets`, create a new C# Script called `WebRTCReader.cs` with this content:
+
+```cs
+using System.Collections;
+using UnityEngine;
+using Unity.WebRTC;
+
+public class WebRTCReader : MonoBehaviour
+{
+    public string url = "http://localhost:8889/stream/whep";
+
+    private RTCPeerConnection pc;
+    private MediaStream receiveStream;
+
+    void Start()
+    {
+        UnityEngine.UI.RawImage rawImage = gameObject.GetComponentInChildren<UnityEngine.UI.RawImage>();
+        AudioSource audioSource = gameObject.GetComponentInChildren<AudioSource>();
+        pc = new RTCPeerConnection();
+        receiveStream = new MediaStream();
+
+        pc.OnTrack = e =>
+        {
+            receiveStream.AddTrack(e.Track);
+        };
+
+        receiveStream.OnAddTrack = e =>
+        {
+            if (e.Track is VideoStreamTrack videoTrack)
+            {
+                videoTrack.OnVideoReceived += (tex) =>
+                {
+                    rawImage.texture = tex;
+                };
+            }
+            else if (e.Track is AudioStreamTrack audioTrack)
+            {
+                audioSource.SetTrack(audioTrack);
+                audioSource.loop = true;
+                audioSource.Play();
+            }
+        };
+
+        RTCRtpTransceiverInit init = new RTCRtpTransceiverInit();
+        init.direction = RTCRtpTransceiverDirection.RecvOnly;
+        pc.AddTransceiver(TrackKind.Audio, init);
+        pc.AddTransceiver(TrackKind.Video, init);
+
+        StartCoroutine(WebRTC.Update());
+        StartCoroutine(createOffer());
+    }
+
+    private IEnumerator createOffer()
+    {
+        var op = pc.CreateOffer();
+        yield return op;
+        if (op.IsError) {
+            Debug.LogError("CreateOffer() failed");
+            yield break;
+        }
+
+        yield return setLocalDescription(op.Desc);
+    }
+
+    private IEnumerator setLocalDescription(RTCSessionDescription offer)
+    {
+        var op = pc.SetLocalDescription(ref offer);
+        yield return op;
+        if (op.IsError) {
+            Debug.LogError("SetLocalDescription() failed");
+            yield break;
+        }
+
+        yield return postOffer(offer);
+    }
+
+    private IEnumerator postOffer(RTCSessionDescription offer)
+    {
+        var content = new System.Net.Http.StringContent(offer.sdp);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/sdp");
+        var client = new System.Net.Http.HttpClient();
+
+        var task = System.Threading.Tasks.Task.Run(async () => {
+            var res = await client.PostAsync(new System.UriBuilder(url).Uri, content);
+            res.EnsureSuccessStatusCode();
+            return await res.Content.ReadAsStringAsync();
+        });
+        yield return new WaitUntil(() => task.IsCompleted);
+        if (task.Exception != null) {
+            Debug.LogError(task.Exception);
+            yield break;
+        }
+
+        yield return setRemoteDescription(task.Result);
+    }
+
+    private IEnumerator setRemoteDescription(string answer)
+    {
+        RTCSessionDescription desc = new RTCSessionDescription();
+        desc.type = RTCSdpType.Answer;
+        desc.sdp = answer;
+        var op = pc.SetRemoteDescription(ref desc);
+        yield return op;
+        if (op.IsError) {
+            Debug.LogError("SetRemoteDescription() failed");
+            yield break;
+        }
+
+        yield break;
+    }
+
+    void OnDestroy()
+    {
+        pc?.Close();
+        pc?.Dispose();
+        receiveStream?.Dispose();
+    }
+}
+```
+
+Edit the `url` variable according to your needs.
+
+In the _Hierarchy_ window, find or create a scene. Inside the scene, add a _Canvas_. Inside the Canvas, add a _Raw Image_ and an _Audio Source_. Then add the `WebRTCReader.cs` script as component of the canvas, by dragging it inside the _Inspector_ window. then Press the _Play_ button at the top of the page.
+
 #### Web browsers
 
 Web browsers can read a stream from the server in multiple ways (WebRTC or HLS).
@@ -884,7 +1130,7 @@ Regarding authentication, read [Authenticating with WHIP/WHEP](#authenticating-w
 
 Depending on the network it may be difficult to establish a connection between server and clients, read [Solving WebRTC connectivity issues](#solving-webrtc-connectivity-issues).
 
-Known clients that can read with WebRTC and WHEP are [FFmpeg](#ffmpeg-1), [GStreamer](#gstreamer-1) and [web browsers](#web-browsers-1).
+Known clients that can read with WebRTC and WHEP are [FFmpeg](#ffmpeg-1), [GStreamer](#gstreamer-1), [Unity](#unity-1) and [web browsers](#web-browsers-1).
 
 #### RTSP
 
@@ -942,7 +1188,7 @@ If you want to support most browsers, you can to re-encode the stream by using t
 
 ```sh
 ffmpeg -i rtsp://original-source \
--pix_fmt yuv420p -c:v libx264 -preset ultrafast -b:v 600k \
+-c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k \
 -c:a aac -b:a 160k \
 -f rtsp rtsp://localhost:8554/mystream
 ```
@@ -997,7 +1243,7 @@ To decrease the latency, you can:
   * otherwise, the stream must be re-encoded. It's possible to tune the IDR frame interval by using ffmpeg's -g option:
 
     ```sh
-    ffmpeg -i rtsp://original-stream -pix_fmt yuv420p -c:v libx264 -preset ultrafast -b:v 600k -max_muxing_queue_size 1024 -g 30 -f rtsp rtsp://localhost:$RTSP_PORT/compressed
+    ffmpeg -i rtsp://original-stream -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k -max_muxing_queue_size 1024 -g 30 -f rtsp rtsp://localhost:$RTSP_PORT/compressed
     ```
 
 ## Other features
@@ -1124,7 +1370,7 @@ Authentication can be delegated to an external HTTP server:
 
 ```yml
 authMethod: http
-externalAuthenticationURL: http://myauthserver/auth
+authHTTPAddress: http://myauthserver/auth
 ```
 
 Each time a user needs to be authenticated, the specified URL will be requested with the POST method and this payload:
@@ -1147,7 +1393,7 @@ If the URL returns a status code that begins with `20` (i.e. `200`), authenticat
 ```json
 {
   "user": "",
-  "password": "",
+  "password": ""
 }
 ```
 
@@ -1171,9 +1417,10 @@ Authentication can be delegated to an external identity server, that is capable 
 ```yml
 authMethod: jwt
 authJWTJWKS: http://my_identity_server/jwks_endpoint
+authJWTClaimKey: mediamtx_permissions
 ```
 
-The JWT is expected to contain the `mediamtx_permissions` scope, with a list of permissions in the same format as the one of user permissions:
+The JWT is expected to contain a claim, with a list of permissions in the same format as the one of user permissions:
 
 ```json
 {
@@ -1186,7 +1433,7 @@ The JWT is expected to contain the `mediamtx_permissions` scope, with a list of 
 }
 ```
 
-Clients are expected to pass the JWT in the Authorization header (in case of HLS and WebRTC) or in query parameters (in case of any other protocol), for instance (RTSP):
+Clients are expected to pass the JWT in the Authorization header (in case of HLS, WebRTC and all web-based features) or in query parameters (in case of all other protocols), for instance:
 
 ```
 ffmpeg -re -stream_loop -1 -i file.ts -c copy -f rtsp rtsp://localhost:8554/mystream?jwt=MY_JWT
@@ -1228,12 +1475,12 @@ Here's a tutorial on how to setup the [Keycloak identity server](https://www.key
 
 7. Open tab _Client scopes_, _Add client scope_, Select `mediamtx`, Add, Default
 
-8. Open page _Users_, _Create user_, Username `testuser`, Tab credentials, _Set password_, pick a password, Save
+8. Open page _Users_, _Add user_, Username `testuser`, Tab credentials, _Set password_, pick a password, Save
 
 9. Open tab _Attributes_, _Add an attribute_
 
    * Key: `mediamtx_permissions`
-   * Value: `{"action":"publish", "paths": "all"}`
+   * Value: `{"action":"publish", "path": ""}`
 
    You can add as many attributes with key `mediamtx_permissions` as you want, each with a single permission in it
 
@@ -1281,7 +1528,7 @@ paths:
   original:
     runOnReady: >
       ffmpeg -i rtsp://localhost:$RTSP_PORT/$MTX_PATH
-        -pix_fmt yuv420p -c:v libx264 -preset ultrafast -b:v 600k
+        -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k
         -max_muxing_queue_size 1024 -f rtsp rtsp://localhost:$RTSP_PORT/compressed
     runOnReadyRestart: yes
 ```
@@ -1350,16 +1597,18 @@ Where [mypath] is the name of a path. The server will return a list of timespans
 [
   {
     "start": "2006-01-02T15:04:05Z07:00",
-    "duration": "60.0"
+    "duration": "60.0",
+    "url": "http://localhost:9996/get?path=[mypath]&start=2006-01-02T15%3A04%3A05Z07%3A00&duration=60.0"
   },
   {
     "start": "2006-01-02T15:07:05Z07:00",
-    "duration": "32.33"
+    "duration": "32.33",
+    "url": "http://localhost:9996/get?path=[mypath]&start=2006-01-02T15%3A07%3A05Z07%3A00&duration=32.33"
   }
 ]
 ```
 
-The server provides an endpoint for downloading recordings:
+The server provides an endpoint to download recordings:
 
 ```
 http://localhost:9996/get?path=[mypath]&start=[start_date]&duration=[duration]&format=[format]
@@ -1375,7 +1624,7 @@ Where:
 All parameters must be [url-encoded](https://www.urlencoder.org/). For instance:
 
 ```
-http://localhost:9996/get?path=stream2&start=2024-01-14T16%3A33%3A17%2B00%3A00&duration=200.5
+http://localhost:9996/get?path=mypath&start=2024-01-14T16%3A33%3A17%2B00%3A00&duration=200.5
 ```
 
 The resulting stream uses the fMP4 format, that is natively compatible with any browser, therefore its URL can be directly inserted into a \<video> tag:
@@ -1457,6 +1706,13 @@ ExecStart=/usr/local/bin/mediamtx /usr/local/etc/mediamtx.yml
 [Install]
 WantedBy=multi-user.target
 EOF
+```
+
+If SELinux is enabled (for instance in case of RedHat, Rocky, CentOS++), add correct security context:
+
+```sh
+semanage fcontext -a -t bin_t /usr/local/bin/mediamtx
+restorecon -Fv /usr/local/bin/mediamtx
 ```
 
 Enable and start the service:
@@ -1891,10 +2147,9 @@ docker run --rm -it \
 bluenviron/mediamtx
 ```
 
-If you still have problems, maybe the UDP protocol is blocked by a firewall. Enable the local TCP listener:
+If you still have problems, the UDP protocol might be blocked by a firewall. Enable the TCP protocol by enabling the local TCP listener:
 
 ```yml
-# any port of choice
 webrtcLocalTCPAddress: :8189
 ```
 
@@ -1903,15 +2158,15 @@ If there's a NAT / container between server and clients, it must be configured t
 If you still have problems, enable a STUN server:
 
 ```yml
-# STUN servers allows to obtain and share the public IP of the server.
 webrtcICEServers2:
   - url: stun:stun.l.google.com:19302
 ```
 
-If you really still have problems, you can force all WebRTC/ICE connections to pass through a TURN server, like coturn, that must be configured externally. The server address and credentials must be set in the configuration file:
+When a STUN server is in use, connections can be established with the "UDP hole punching" method, that uses a random UDP port that does not need to be open.
+
+If you really still have problems, you can force all WebRTC/ICE connections to pass through a TURN server, like [coturn](https://github.com/coturn/coturn), that must be configured externally. The server address and credentials must be set in the configuration file:
 
 ```yml
-# TURN/TURNS servers forces all traffic through them.
 webrtcICEServers2:
 - url: turn:host:port
   username: user
@@ -2046,25 +2301,6 @@ CGO_ENABLED=0 go build .
 
 The command will produce the `mediamtx` binary.
 
-### Raspberry Pi
-
-The server can be compiled with native support for the Raspberry Pi Camera. Compilation must be performed on a Raspberry Pi, with the following dependencies:
-
-* Go &ge; 1.22
-* `libcamera-dev`
-* `libfreetype-dev`
-* `xxd`
-
-Download the repository, open a terminal in it and run:
-
-```sh
-make -C internal/protocols/rpicamera/exe -j$(nproc)
-go generate ./...
-go build -tags rpicamera .
-```
-
-The command will produce the `mediamtx` binary.
-
 ### OpenWrt
 
 The compilation procedure is the same as the standard one. On the OpenWrt device, install git and Go:
@@ -2086,6 +2322,10 @@ CGO_ENABLED=0 go build .
 The command will produce the `mediamtx` binary.
 
 If the OpenWrt device doesn't have enough resources to compile, you can [cross compile](#cross-compile) from another machine.
+
+### Custom libcamera
+
+If you need to use a custom or external libcamera when interacting with the Raspberry Pi Camera, you have to compile [mediamtx-rpicamera](https://github.com/bluenviron/mediamtx-rpicamera) before compiling the server. Instructions are present in the `mediamtx-rpicamera` repository.
 
 ### Cross compile
 
@@ -2150,7 +2390,7 @@ All the code in this repository is released under the [MIT License](LICENSE). Co
 |[RTSP / RTP / RTCP specifications](https://github.com/bluenviron/gortsplib#specifications)|RTSP|
 |[HLS specifications](https://github.com/bluenviron/gohlslib#specifications)|HLS|
 |[RTMP](https://rtmp.veriskope.com/pdf/rtmp_specification_1.0.pdf)|RTMP|
-|[Enhanced RTMP](https://raw.githubusercontent.com/veovera/enhanced-rtmp/main/enhanced-rtmp-v1.pdf)|RTMP|
+|[Enhanced RTMP v1](https://veovera.org/docs/enhanced/enhanced-rtmp-v1.pdf)|RTMP|
 |[Action Message Format](https://rtmp.veriskope.com/pdf/amf0-file-format-specification.pdf)|RTMP|
 |[WebRTC: Real-Time Communication in Browsers](https://www.w3.org/TR/webrtc/)|WebRTC|
 |[WebRTC HTTP Ingestion Protocol (WHIP)](https://datatracker.ietf.org/doc/draft-ietf-wish-whip/)|WebRTC|
@@ -2164,6 +2404,7 @@ All the code in this repository is released under the [MIT License](LICENSE). Co
 * [gortsplib (RTSP library used internally)](https://github.com/bluenviron/gortsplib)
 * [gohlslib (HLS library used internally)](https://github.com/bluenviron/gohlslib)
 * [mediacommon (codecs and formats library used internally)](https://github.com/bluenviron/mediacommon)
+* [mediamtx-rpicamera (Raspberry Pi Camera component)](https://github.com/bluenviron/mediamtx-rpicamera)
 * [datarhei/gosrt (SRT library used internally)](https://github.com/datarhei/gosrt)
 * [pion/webrtc (WebRTC library used internally)](https://github.com/pion/webrtc)
 * [pion/sdp (SDP library used internally)](https://github.com/pion/sdp)
