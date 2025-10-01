@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -31,6 +32,10 @@ var ErrConnNotFound = errors.New("connection not found")
 // ErrSessionNotFound is returned when a session is not found.
 var ErrSessionNotFound = errors.New("session not found")
 
+func interfaceIsEmpty(i interface{}) bool {
+	return reflect.ValueOf(i).Kind() != reflect.Ptr || reflect.ValueOf(i).IsNil()
+}
+
 func printAddresses(srv *gortsplib.Server) string {
 	var ret []string
 
@@ -47,6 +52,11 @@ func printAddresses(srv *gortsplib.Server) string {
 	return strings.Join(ret, ", ")
 }
 
+type serverMetrics interface {
+	SetRTSPSServer(defs.APIRTSPServer)
+	SetRTSPServer(defs.APIRTSPServer)
+}
+
 type serverPathManager interface {
 	Describe(req defs.PathDescribeReq) defs.PathDescribeRes
 	AddPublisher(_ defs.PathAddPublisherReq) (defs.Path, error)
@@ -60,9 +70,9 @@ type serverParent interface {
 // Server is a RTSP server.
 type Server struct {
 	Address             string
-	AuthMethods         []auth.ValidateMethod
-	ReadTimeout         conf.StringDuration
-	WriteTimeout        conf.StringDuration
+	AuthMethods         []auth.VerifyMethod
+	ReadTimeout         conf.Duration
+	WriteTimeout        conf.Duration
 	WriteQueueSize      int
 	UseUDP              bool
 	UseMulticast        bool
@@ -75,11 +85,12 @@ type Server struct {
 	ServerCert          string
 	ServerKey           string
 	RTSPAddress         string
-	Protocols           map[conf.Protocol]struct{}
+	Transports          conf.RTSPTransports
 	RunOnConnect        string
 	RunOnConnectRestart bool
 	RunOnDisconnect     string
 	ExternalCmdPool     *externalcmd.Pool
+	Metrics             serverMetrics
 	PathManager         serverPathManager
 	Parent              serverParent
 
@@ -106,6 +117,7 @@ func (s *Server) Initialize() error {
 		WriteTimeout:   time.Duration(s.WriteTimeout),
 		WriteQueueSize: s.WriteQueueSize,
 		RTSPAddress:    s.Address,
+		AuthMethods:    s.AuthMethods,
 	}
 
 	if s.UseUDP {
@@ -120,8 +132,12 @@ func (s *Server) Initialize() error {
 	}
 
 	if s.IsTLS {
-		var err error
-		s.loader, err = certloader.New(s.ServerCert, s.ServerKey, s.Parent)
+		s.loader = &certloader.CertLoader{
+			CertPath: s.ServerCert,
+			KeyPath:  s.ServerKey,
+			Parent:   s.Parent,
+		}
+		err := s.loader.Initialize()
 		if err != nil {
 			return err
 		}
@@ -138,6 +154,14 @@ func (s *Server) Initialize() error {
 
 	s.wg.Add(1)
 	go s.run()
+
+	if !interfaceIsEmpty(s.Metrics) {
+		if s.IsTLS {
+			s.Metrics.SetRTSPSServer(s)
+		} else {
+			s.Metrics.SetRTSPServer(s)
+		}
+	}
 
 	return nil
 }
@@ -156,8 +180,18 @@ func (s *Server) Log(level logger.Level, format string, args ...interface{}) {
 // Close closes the server.
 func (s *Server) Close() {
 	s.Log(logger.Info, "listener is closing")
+
+	if !interfaceIsEmpty(s.Metrics) {
+		if s.IsTLS {
+			s.Metrics.SetRTSPSServer(nil)
+		} else {
+			s.Metrics.SetRTSPServer(nil)
+		}
+	}
+
 	s.ctxCancel()
 	s.wg.Wait()
+
 	if s.loader != nil {
 		s.loader.Close()
 	}
@@ -235,7 +269,7 @@ func (s *Server) OnResponse(sc *gortsplib.ServerConn, res *base.Response) {
 func (s *Server) OnSessionOpen(ctx *gortsplib.ServerHandlerOnSessionOpenCtx) {
 	se := &session{
 		isTLS:           s.IsTLS,
-		protocols:       s.Protocols,
+		transports:      s.Transports,
 		rsession:        ctx.Session,
 		rconn:           ctx.Conn,
 		rserver:         s.srv,
@@ -301,10 +335,10 @@ func (s *Server) OnPause(ctx *gortsplib.ServerHandlerOnPauseCtx) (*base.Response
 	return se.onPause(ctx)
 }
 
-// OnPacketLost implements gortsplib.ServerHandlerOnDecodeError.
-func (s *Server) OnPacketLost(ctx *gortsplib.ServerHandlerOnPacketLostCtx) {
+// OnPacketsLost implements gortsplib.ServerHandlerOnPacketsLost.
+func (s *Server) OnPacketsLost(ctx *gortsplib.ServerHandlerOnPacketsLostCtx) {
 	se := ctx.Session.UserData().(*session)
-	se.onPacketLost(ctx)
+	se.onPacketsLost(ctx)
 }
 
 // OnDecodeError implements gortsplib.ServerHandlerOnDecodeError.
@@ -335,6 +369,10 @@ func (s *Server) findSessionByUUID(uuid uuid.UUID) (*gortsplib.ServerSession, *s
 		}
 	}
 	return nil, nil
+}
+
+func (s *Server) findSessionByRSessionUnsafe(rsession *gortsplib.ServerSession) *session {
+	return s.sessions[rsession]
 }
 
 // APIConnsList is called by api and metrics.

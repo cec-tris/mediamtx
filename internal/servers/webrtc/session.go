@@ -12,15 +12,17 @@ import (
 
 	"github.com/bluenviron/gortsplib/v4/pkg/description"
 	"github.com/google/uuid"
-	"github.com/pion/ice/v2"
+	"github.com/pion/ice/v4"
 	"github.com/pion/sdp/v3"
-	pwebrtc "github.com/pion/webrtc/v3"
+	pwebrtc "github.com/pion/webrtc/v4"
 
 	"github.com/bluenviron/mediamtx/internal/auth"
+	"github.com/bluenviron/mediamtx/internal/conf"
 	"github.com/bluenviron/mediamtx/internal/defs"
 	"github.com/bluenviron/mediamtx/internal/externalcmd"
 	"github.com/bluenviron/mediamtx/internal/hooks"
 	"github.com/bluenviron/mediamtx/internal/logger"
+	"github.com/bluenviron/mediamtx/internal/protocols/httpp"
 	"github.com/bluenviron/mediamtx/internal/protocols/webrtc"
 	"github.com/bluenviron/mediamtx/internal/stream"
 )
@@ -32,6 +34,12 @@ func whipOffer(body []byte) *pwebrtc.SessionDescription {
 	}
 }
 
+type sessionParent interface {
+	closeSession(sx *session)
+	generateICEServers(clientConfig bool) ([]pwebrtc.ICEServer, error)
+	logger.Writer
+}
+
 type session struct {
 	parentCtx             context.Context
 	ipsFromInterfaces     bool
@@ -39,11 +47,14 @@ type session struct {
 	additionalHosts       []string
 	iceUDPMux             ice.UDPMux
 	iceTCPMux             ice.TCPMux
+	handshakeTimeout      conf.Duration
+	trackGatherTimeout    conf.Duration
+	stunGatherTimeout     conf.Duration
 	req                   webRTCNewSessionReq
 	wg                    *sync.WaitGroup
 	externalCmdPool       *externalcmd.Pool
 	pathManager           serverPathManager
-	parent                *Server
+	parent                sessionParent
 
 	ctx       context.Context
 	ctxCancel func()
@@ -126,16 +137,19 @@ func (s *session) runInner2() (int, error) {
 func (s *session) runPublish() (int, error) {
 	ip, _, _ := net.SplitHostPort(s.req.remoteAddr)
 
+	req := defs.PathAccessRequest{
+		Name:        s.req.pathName,
+		Query:       s.req.httpRequest.URL.RawQuery,
+		Publish:     true,
+		Proto:       auth.ProtocolWebRTC,
+		ID:          &s.uuid,
+		Credentials: httpp.Credentials(s.req.httpRequest),
+		IP:          net.ParseIP(ip),
+	}
+
 	path, err := s.pathManager.AddPublisher(defs.PathAddPublisherReq{
-		Author: s,
-		AccessRequest: defs.PathAccessRequest{
-			Name:        s.req.pathName,
-			Publish:     true,
-			IP:          net.ParseIP(ip),
-			Proto:       auth.ProtocolWebRTC,
-			ID:          &s.uuid,
-			HTTPRequest: s.req.httpRequest,
-		},
+		Author:        s,
+		AccessRequest: req,
 	})
 	if err != nil {
 		return http.StatusBadRequest, err
@@ -149,15 +163,17 @@ func (s *session) runPublish() (int, error) {
 	}
 
 	pc := &webrtc.PeerConnection{
+		ICEUDPMux:             s.iceUDPMux,
+		ICETCPMux:             s.iceTCPMux,
 		ICEServers:            iceServers,
-		HandshakeTimeout:      s.parent.HandshakeTimeout,
-		TrackGatherTimeout:    s.parent.TrackGatherTimeout,
 		IPsFromInterfaces:     s.ipsFromInterfaces,
 		IPsFromInterfacesList: s.ipsFromInterfacesList,
 		AdditionalHosts:       s.additionalHosts,
-		ICEUDPMux:             s.iceUDPMux,
-		ICETCPMux:             s.iceTCPMux,
+		HandshakeTimeout:      s.handshakeTimeout,
+		TrackGatherTimeout:    s.trackGatherTimeout,
+		STUNGatherTimeout:     s.stunGatherTimeout,
 		Publish:               false,
+		UseAbsoluteTimestamp:  path.SafeConf().UseAbsoluteTimestamp,
 		Log:                   s,
 	}
 	err = pc.Start()
@@ -202,7 +218,7 @@ func (s *session) runPublish() (int, error) {
 	s.pc = pc
 	s.mutex.Unlock()
 
-	_, err = pc.GatherIncomingTracks(s.ctx)
+	err = pc.GatherIncomingTracks(s.ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -226,7 +242,7 @@ func (s *session) runPublish() (int, error) {
 	pc.StartReading()
 
 	select {
-	case <-pc.Disconnected():
+	case <-pc.Failed():
 		return 0, fmt.Errorf("peer connection closed")
 
 	case <-s.ctx.Done():
@@ -237,18 +253,21 @@ func (s *session) runPublish() (int, error) {
 func (s *session) runRead() (int, error) {
 	ip, _, _ := net.SplitHostPort(s.req.remoteAddr)
 
+	req := defs.PathAccessRequest{
+		Name:        s.req.pathName,
+		Query:       s.req.httpRequest.URL.RawQuery,
+		Proto:       auth.ProtocolWebRTC,
+		ID:          &s.uuid,
+		Credentials: httpp.Credentials(s.req.httpRequest),
+		IP:          net.ParseIP(ip),
+	}
+
 	path, stream, err := s.pathManager.AddReader(defs.PathAddReaderReq{
-		Author: s,
-		AccessRequest: defs.PathAccessRequest{
-			Name:        s.req.pathName,
-			IP:          net.ParseIP(ip),
-			Proto:       auth.ProtocolWebRTC,
-			ID:          &s.uuid,
-			HTTPRequest: s.req.httpRequest,
-		},
+		Author:        s,
+		AccessRequest: req,
 	})
 	if err != nil {
-		var terr2 defs.PathNoOnePublishingError
+		var terr2 defs.PathNoStreamAvailableError
 		if errors.As(err, &terr2) {
 			return http.StatusNotFound, err
 		}
@@ -264,15 +283,17 @@ func (s *session) runRead() (int, error) {
 	}
 
 	pc := &webrtc.PeerConnection{
+		ICEUDPMux:             s.iceUDPMux,
+		ICETCPMux:             s.iceTCPMux,
 		ICEServers:            iceServers,
-		HandshakeTimeout:      s.parent.HandshakeTimeout,
-		TrackGatherTimeout:    s.parent.TrackGatherTimeout,
 		IPsFromInterfaces:     s.ipsFromInterfaces,
 		IPsFromInterfacesList: s.ipsFromInterfacesList,
 		AdditionalHosts:       s.additionalHosts,
-		ICEUDPMux:             s.iceUDPMux,
-		ICETCPMux:             s.iceTCPMux,
+		HandshakeTimeout:      s.handshakeTimeout,
+		TrackGatherTimeout:    s.trackGatherTimeout,
+		STUNGatherTimeout:     s.stunGatherTimeout,
 		Publish:               true,
+		UseAbsoluteTimestamp:  path.SafeConf().UseAbsoluteTimestamp,
 		Log:                   s,
 	}
 
@@ -327,7 +348,7 @@ func (s *session) runRead() (int, error) {
 	defer stream.RemoveReader(s)
 
 	select {
-	case <-pc.Disconnected():
+	case <-pc.Failed():
 		return 0, fmt.Errorf("peer connection closed")
 
 	case err := <-stream.ReaderError(s):
@@ -390,7 +411,7 @@ func (s *session) addCandidates(
 // APIReaderDescribe implements reader.
 func (s *session) APIReaderDescribe() defs.APIPathSourceOrReader {
 	return defs.APIPathSourceOrReader{
-		Type: "webrtcSession",
+		Type: "webRTCSession",
 		ID:   s.uuid.String(),
 	}
 }
