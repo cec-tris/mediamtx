@@ -4,11 +4,13 @@ package hls
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/bluenviron/gohlslib/v2"
 	"github.com/bluenviron/gohlslib/v2/pkg/codecs"
-	"github.com/bluenviron/gortsplib/v4/pkg/description"
-	"github.com/bluenviron/gortsplib/v4/pkg/format"
+	"github.com/bluenviron/gortsplib/v5/pkg/description"
+	"github.com/bluenviron/gortsplib/v5/pkg/format"
+	"github.com/bluenviron/mediacommon/v2/pkg/codecs/mpeg4audio"
 	"github.com/bluenviron/mediamtx/internal/logger"
 	"github.com/bluenviron/mediamtx/internal/stream"
 	"github.com/bluenviron/mediamtx/internal/unit"
@@ -19,24 +21,22 @@ var ErrNoSupportedCodecs = errors.New(
 	"the stream doesn't contain any supported codec, which are currently AV1, VP9, H265, H264, Opus, MPEG-4 Audio")
 
 func setupVideoTrack(
-	strea *stream.Stream,
-	reader stream.Reader,
+	desc *description.Session,
+	r *stream.Reader,
 	muxer *gohlslib.Muxer,
-	setuppedFormats map[format.Format]struct{},
 ) {
 	addTrack := func(
 		media *description.Media,
 		forma format.Format,
 		track *gohlslib.Track,
-		readFunc stream.ReadFunc,
+		onData stream.OnDataFunc,
 	) {
 		muxer.Tracks = append(muxer.Tracks, track)
-		setuppedFormats[forma] = struct{}{}
-		strea.AddReader(reader, media, forma, readFunc)
+		r.OnData(media, forma, onData)
 	}
 
 	var videoFormatAV1 *format.AV1
-	videoMedia := strea.Desc.FindFormat(&videoFormatAV1)
+	videoMedia := desc.FindFormat(&videoFormatAV1)
 
 	if videoFormatAV1 != nil {
 		track := &gohlslib.Track{
@@ -71,7 +71,7 @@ func setupVideoTrack(
 	}
 
 	var videoFormatVP9 *format.VP9
-	videoMedia = strea.Desc.FindFormat(&videoFormatVP9)
+	videoMedia = desc.FindFormat(&videoFormatVP9)
 
 	if videoFormatVP9 != nil {
 		track := &gohlslib.Track{
@@ -106,7 +106,7 @@ func setupVideoTrack(
 	}
 
 	var videoFormatH265 *format.H265
-	videoMedia = strea.Desc.FindFormat(&videoFormatH265)
+	videoMedia = desc.FindFormat(&videoFormatH265)
 
 	if videoFormatH265 != nil {
 		vps, sps, pps := videoFormatH265.SafeParams()
@@ -146,7 +146,7 @@ func setupVideoTrack(
 	}
 
 	var videoFormatH264 *format.H264
-	videoMedia = strea.Desc.FindFormat(&videoFormatH264)
+	videoMedia = desc.FindFormat(&videoFormatH264)
 
 	if videoFormatH264 != nil {
 		sps, pps := videoFormatH264.SafeParams()
@@ -186,23 +186,21 @@ func setupVideoTrack(
 }
 
 func setupAudioTracks(
-	strea *stream.Stream,
-	reader stream.Reader,
+	desc *description.Session,
+	r *stream.Reader,
 	muxer *gohlslib.Muxer,
-	setuppedFormats map[format.Format]struct{},
 ) {
 	addTrack := func(
 		medi *description.Media,
 		forma format.Format,
 		track *gohlslib.Track,
-		readFunc stream.ReadFunc,
+		onData stream.OnDataFunc,
 	) {
 		muxer.Tracks = append(muxer.Tracks, track)
-		setuppedFormats[forma] = struct{}{}
-		strea.AddReader(reader, medi, forma, readFunc)
+		r.OnData(medi, forma, onData)
 	}
 
-	for _, media := range strea.Desc.Medias {
+	for _, media := range desc.Medias {
 		for _, forma := range media.Formats {
 			switch forma := forma.(type) {
 			case *format.Opus:
@@ -233,11 +231,41 @@ func setupAudioTracks(
 					})
 
 			case *format.MPEG4Audio:
-				co := forma.GetConfig()
-				if co != nil {
+				track := &gohlslib.Track{
+					Codec: &codecs.MPEG4Audio{
+						Config: *forma.Config,
+					},
+					ClockRate: forma.ClockRate(),
+				}
+
+				addTrack(
+					media,
+					forma,
+					track,
+					func(u unit.Unit) error {
+						tunit := u.(*unit.MPEG4Audio)
+
+						if tunit.AUs == nil {
+							return nil
+						}
+
+						err := muxer.WriteMPEG4Audio(
+							track,
+							tunit.NTP,
+							tunit.PTS, // no conversion is needed since we set gohlslib.Track.ClockRate = format.ClockRate
+							tunit.AUs)
+						if err != nil {
+							return fmt.Errorf("muxer error: %w", err)
+						}
+
+						return nil
+					})
+
+			case *format.MPEG4AudioLATM:
+				if !forma.CPresent {
 					track := &gohlslib.Track{
 						Codec: &codecs.MPEG4Audio{
-							Config: *co,
+							Config: *forma.StreamMuxConfig.Programs[0].Layers[0].AudioSpecificConfig,
 						},
 						ClockRate: forma.ClockRate(),
 					}
@@ -247,22 +275,24 @@ func setupAudioTracks(
 						forma,
 						track,
 						func(u unit.Unit) error {
-							tunit := u.(*unit.MPEG4Audio)
+							tunit := u.(*unit.MPEG4AudioLATM)
 
-							if tunit.AUs == nil {
+							if tunit.Element == nil {
 								return nil
 							}
 
-							err := muxer.WriteMPEG4Audio(
+							var ame mpeg4audio.AudioMuxElement
+							ame.StreamMuxConfig = forma.StreamMuxConfig
+							err := ame.Unmarshal(tunit.Element)
+							if err != nil {
+								return err
+							}
+
+							return muxer.WriteMPEG4Audio(
 								track,
 								tunit.NTP,
 								tunit.PTS, // no conversion is needed since we set gohlslib.Track.ClockRate = format.ClockRate
-								tunit.AUs)
-							if err != nil {
-								return fmt.Errorf("muxer error: %w", err)
-							}
-
-							return nil
+								[][]byte{ame.Payloads[0][0][0]})
 						})
 				}
 			}
@@ -272,35 +302,33 @@ func setupAudioTracks(
 
 // FromStream maps a MediaMTX stream to a HLS muxer.
 func FromStream(
-	stream *stream.Stream,
-	reader stream.Reader,
+	desc *description.Session,
+	r *stream.Reader,
 	muxer *gohlslib.Muxer,
 ) error {
-	setuppedFormats := make(map[format.Format]struct{})
-
 	setupVideoTrack(
-		stream,
-		reader,
+		desc,
+		r,
 		muxer,
-		setuppedFormats,
 	)
 
 	setupAudioTracks(
-		stream,
-		reader,
+		desc,
+		r,
 		muxer,
-		setuppedFormats,
 	)
 
 	if len(muxer.Tracks) == 0 {
 		return ErrNoSupportedCodecs
 	}
 
+	setuppedFormats := r.Formats()
+
 	n := 1
-	for _, media := range stream.Desc.Medias {
+	for _, media := range desc.Medias {
 		for _, forma := range media.Formats {
-			if _, ok := setuppedFormats[forma]; !ok {
-				reader.Log(logger.Warn, "skipping track %d (%s)", n, forma.Codec())
+			if !slices.Contains(setuppedFormats, forma) {
+				r.Parent.Log(logger.Warn, "skipping track %d (%s)", n, forma.Codec())
 			}
 			n++
 		}

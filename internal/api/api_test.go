@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -18,9 +19,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testParent struct{}
+type testParent struct {
+	log func(_ logger.Level, _ string, _ ...interface{})
+}
 
-func (testParent) Log(_ logger.Level, _ string, _ ...interface{}) {
+func (p testParent) Log(l logger.Level, s string, a ...interface{}) {
+	if p.log != nil {
+		p.log(l, s, a...)
+	}
 }
 
 func (testParent) APIConfigSet(_ *conf.Conf) {}
@@ -111,10 +117,12 @@ func TestPreflightRequest(t *testing.T) {
 	require.Equal(t, byts, []byte{})
 }
 
-func TestConfigGlobalGet(t *testing.T) {
+func TestInfo(t *testing.T) {
 	cnf := tempConf(t, "api: yes\n")
 
 	api := API{
+		Version:     "v1.2.3",
+		Started:     time.Date(2008, 11, 7, 11, 22, 0, 0, time.Local),
 		Address:     "localhost:9997",
 		ReadTimeout: conf.Duration(10 * time.Second),
 		Conf:        cnf,
@@ -130,8 +138,45 @@ func TestConfigGlobalGet(t *testing.T) {
 	hc := &http.Client{Transport: tr}
 
 	var out map[string]interface{}
-	httpRequest(t, hc, http.MethodGet, "http://localhost:9997/v3/config/global/get", nil, &out)
+	httpRequest(t, hc, http.MethodGet, "http://localhost:9997/v3/info", nil, &out)
+	require.Equal(t, map[string]interface{}{
+		"started": time.Date(2008, 11, 7, 11, 22, 0, 0, time.Local).Format(time.RFC3339),
+		"version": "v1.2.3",
+	}, out)
+}
+
+func TestConfigGlobalGet(t *testing.T) {
+	cnf := tempConf(t, "api: yes\n")
+	checked := false
+
+	api := API{
+		Address:     "localhost:9997",
+		ReadTimeout: conf.Duration(10 * time.Second),
+		Conf:        cnf,
+		AuthManager: &test.AuthManager{
+			AuthenticateImpl: func(req *auth.Request) *auth.Error {
+				require.Equal(t, conf.AuthActionAPI, req.Action)
+				require.Equal(t, "myuser", req.Credentials.User)
+				require.Equal(t, "mypass", req.Credentials.Pass)
+				checked = true
+				return nil
+			},
+		},
+		Parent: &testParent{},
+	}
+	err := api.Initialize()
+	require.NoError(t, err)
+	defer api.Close()
+
+	tr := &http.Transport{}
+	defer tr.CloseIdleConnections()
+	hc := &http.Client{Transport: tr}
+
+	var out map[string]interface{}
+	httpRequest(t, hc, http.MethodGet, "http://myuser:mypass@localhost:9997/v3/config/global/get", nil, &out)
 	require.Equal(t, true, out["api"])
+
+	require.True(t, checked)
 }
 
 func TestConfigGlobalPatch(t *testing.T) {
@@ -604,10 +649,10 @@ func TestRecordingsList(t *testing.T) {
 				"name": "mypath1",
 				"segments": []interface{}{
 					map[string]interface{}{
-						"start": time.Date(2008, 11, 0o7, 11, 22, 0, 500000000, time.Local).Format(time.RFC3339Nano),
+						"start": time.Date(2008, 11, 7, 11, 22, 0, 500000000, time.Local).Format(time.RFC3339Nano),
 					},
 					map[string]interface{}{
-						"start": time.Date(2009, 11, 0o7, 11, 22, 0, 900000000, time.Local).Format(time.RFC3339Nano),
+						"start": time.Date(2009, 11, 7, 11, 22, 0, 900000000, time.Local).Format(time.RFC3339Nano),
 					},
 				},
 			},
@@ -615,7 +660,7 @@ func TestRecordingsList(t *testing.T) {
 				"name": "mypath2",
 				"segments": []interface{}{
 					map[string]interface{}{
-						"start": time.Date(2009, 11, 0o7, 11, 22, 0, 900000000, time.Local).Format(time.RFC3339Nano),
+						"start": time.Date(2009, 11, 7, 11, 22, 0, 900000000, time.Local).Format(time.RFC3339Nano),
 					},
 				},
 			},
@@ -663,10 +708,10 @@ func TestRecordingsGet(t *testing.T) {
 		"name": "mypath1",
 		"segments": []interface{}{
 			map[string]interface{}{
-				"start": time.Date(2008, 11, 0o7, 11, 22, 0, 0, time.Local).Format(time.RFC3339Nano),
+				"start": time.Date(2008, 11, 7, 11, 22, 0, 0, time.Local).Format(time.RFC3339Nano),
 			},
 			map[string]interface{}{
-				"start": time.Date(2009, 11, 0o7, 11, 22, 0, 900000000, time.Local).Format(time.RFC3339Nano),
+				"start": time.Date(2009, 11, 7, 11, 22, 0, 900000000, time.Local).Format(time.RFC3339Nano),
 			},
 		},
 	}, out)
@@ -708,7 +753,7 @@ func TestRecordingsDeleteSegment(t *testing.T) {
 
 	v := url.Values{}
 	v.Set("path", "mypath1")
-	v.Set("start", time.Date(2008, 11, 0o7, 11, 22, 0, 900000000, time.Local).Format(time.RFC3339Nano))
+	v.Set("start", time.Date(2008, 11, 7, 11, 22, 0, 900000000, time.Local).Format(time.RFC3339Nano))
 	u.RawQuery = v.Encode()
 
 	req, err := http.NewRequest(http.MethodDelete, u.String(), nil)
@@ -727,7 +772,7 @@ func TestAuthJWKSRefresh(t *testing.T) {
 		Address:     "localhost:9997",
 		ReadTimeout: conf.Duration(10 * time.Second),
 		AuthManager: &test.AuthManager{
-			AuthenticateImpl: func(_ *auth.Request) error {
+			AuthenticateImpl: func(_ *auth.Request) *auth.Error {
 				return nil
 			},
 			RefreshJWTJWKSImpl: func() {
@@ -756,4 +801,55 @@ func TestAuthJWKSRefresh(t *testing.T) {
 	require.Equal(t, http.StatusOK, res.StatusCode)
 
 	require.True(t, ok)
+}
+
+func TestAuthError(t *testing.T) {
+	cnf := tempConf(t, "api: yes\n")
+	n := 0
+
+	api := API{
+		Address:     "localhost:9997",
+		ReadTimeout: conf.Duration(10 * time.Second),
+		Conf:        cnf,
+		AuthManager: &test.AuthManager{
+			AuthenticateImpl: func(req *auth.Request) *auth.Error {
+				if req.Credentials.User == "" {
+					return &auth.Error{AskCredentials: true}
+				}
+				return &auth.Error{Wrapped: fmt.Errorf("auth error")}
+			},
+		},
+		Parent: &testParent{
+			log: func(l logger.Level, s string, i ...interface{}) {
+				if l == logger.Info {
+					if n == 1 {
+						require.Regexp(t, "failed to authenticate: auth error$", fmt.Sprintf(s, i...))
+					}
+					n++
+				}
+			},
+		},
+	}
+	err := api.Initialize()
+	require.NoError(t, err)
+	defer api.Close()
+
+	tr := &http.Transport{}
+	defer tr.CloseIdleConnections()
+	hc := &http.Client{Transport: tr}
+
+	res, err := hc.Get("http://localhost:9997/v3/config/global/get")
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusUnauthorized, res.StatusCode)
+	require.Equal(t, `Basic realm="mediamtx"`, res.Header.Get("WWW-Authenticate"))
+
+	res, err = hc.Get("http://myuser:mypass@localhost:9997/v3/config/global/get")
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusUnauthorized, res.StatusCode)
+
+	require.Equal(t, 2, n)
 }

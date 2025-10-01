@@ -23,7 +23,6 @@ import (
 	"github.com/bluenviron/mediamtx/internal/logger"
 	"github.com/bluenviron/mediamtx/internal/protocols/httpp"
 	"github.com/bluenviron/mediamtx/internal/recordstore"
-	"github.com/bluenviron/mediamtx/internal/restrictnetwork"
 	"github.com/bluenviron/mediamtx/internal/servers/hls"
 	"github.com/bluenviron/mediamtx/internal/servers/rtmp"
 	"github.com/bluenviron/mediamtx/internal/servers/rtsp"
@@ -78,7 +77,7 @@ func recordingsOfPath(
 }
 
 type apiAuthManager interface {
-	Authenticate(req *auth.Request) error
+	Authenticate(req *auth.Request) *auth.Error
 	RefreshJWTJWKS()
 }
 
@@ -89,6 +88,8 @@ type apiParent interface {
 
 // API is an API server.
 type API struct {
+	Version        string
+	Started        time.Time
 	Address        string
 	Encryption     bool
 	ServerKey      string
@@ -121,6 +122,8 @@ func (a *API) Initialize() error {
 	router.Use(a.middlewareAuth)
 
 	group := router.Group("/v3")
+
+	group.GET("/info", a.onInfo)
 
 	group.POST("/auth/jwks/refresh", a.onAuthJwksRefresh)
 
@@ -189,11 +192,8 @@ func (a *API) Initialize() error {
 	group.GET("/recordings/get/*name", a.onRecordingsGet)
 	group.DELETE("/recordings/deletesegment", a.onRecordingDeleteSegment)
 
-	network, address := restrictnetwork.Restrict("tcp", a.Address)
-
 	a.httpServer = &httpp.Server{
-		Network:     network,
-		Address:     address,
+		Address:     a.Address,
 		ReadTimeout: time.Duration(a.ReadTimeout),
 		Encryption:  a.Encryption,
 		ServerCert:  a.ServerCert,
@@ -206,7 +206,7 @@ func (a *API) Initialize() error {
 		return err
 	}
 
-	a.Log(logger.Info, "listener opened on "+address)
+	a.Log(logger.Info, "listener opened on "+a.Address)
 
 	return nil
 }
@@ -256,13 +256,15 @@ func (a *API) middlewareAuth(ctx *gin.Context) {
 
 	err := a.AuthManager.Authenticate(req)
 	if err != nil {
-		if err.(auth.Error).AskCredentials { //nolint:errorlint
+		if err.AskCredentials {
 			ctx.Header("WWW-Authenticate", `Basic realm="mediamtx"`)
 			ctx.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
 
-		// wait some seconds to mitigate brute force attacks
+		a.Log(logger.Info, "connection %v failed to authenticate: %v", httpp.RemoteAddr(ctx), err.Wrapped)
+
+		// wait some seconds to delay brute force attacks
 		<-time.After(auth.PauseAfterError)
 
 		ctx.AbortWithStatus(http.StatusUnauthorized)
@@ -538,6 +540,13 @@ func (a *API) onConfigPathsDelete(ctx *gin.Context) {
 	a.Parent.APIConfigSet(newConf)
 
 	ctx.Status(http.StatusOK)
+}
+
+func (a *API) onInfo(ctx *gin.Context) {
+	ctx.JSON(http.StatusOK, &defs.APIInfo{
+		Version: a.Version,
+		Started: a.Started,
+	})
 }
 
 func (a *API) onAuthJwksRefresh(ctx *gin.Context) {

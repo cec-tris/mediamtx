@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/bluenviron/gohlslib/v2"
-	"github.com/bluenviron/gortsplib/v4/pkg/description"
-	"github.com/bluenviron/gortsplib/v4/pkg/format"
+	"github.com/bluenviron/gortsplib/v5/pkg/description"
+	"github.com/bluenviron/gortsplib/v5/pkg/format"
 	"github.com/bluenviron/mediacommon/v2/pkg/formats/mpegts"
 	"github.com/bluenviron/mediamtx/internal/stream"
 	"github.com/bluenviron/mediamtx/internal/test"
@@ -77,7 +77,7 @@ func TestToStream(t *testing.T) {
 		}),
 	}
 
-	ln, err := net.Listen("tcp", "localhost:5780")
+	ln, err := net.Listen("tcp", "localhost:5781")
 	require.NoError(t, err)
 
 	go s.Serve(ln)
@@ -86,11 +86,11 @@ func TestToStream(t *testing.T) {
 	var strm *stream.Stream
 	done := make(chan struct{})
 
-	reader := test.NilLogger
+	r := &stream.Reader{Parent: test.NilLogger}
 
 	var c *gohlslib.Client
 	c = &gohlslib.Client{
-		URI: "http://localhost:5780/stream.m3u8",
+		URI: "http://localhost:5781/stream.m3u8",
 		OnTracks: func(tracks []*gohlslib.Track) error {
 			medias, err2 := ToStream(c, tracks, &strm)
 			require.NoError(t, err2)
@@ -104,7 +104,7 @@ func TestToStream(t *testing.T) {
 
 			strm = &stream.Stream{
 				WriteQueueSize:     512,
-				UDPMaxPayloadSize:  1472,
+				RTPMaxPayloadSize:  1450,
 				Desc:               &description.Session{Medias: medias},
 				GenerateRTPPackets: true,
 				Parent:             test.NilLogger,
@@ -112,8 +112,7 @@ func TestToStream(t *testing.T) {
 			err2 = strm.Initialize()
 			require.NoError(t, err2)
 
-			strm.AddReader(
-				reader,
+			r.OnData(
 				medias[0],
 				medias[0].Formats[0],
 				func(u unit.Unit) error {
@@ -122,7 +121,7 @@ func TestToStream(t *testing.T) {
 					return nil
 				})
 
-			strm.StartReader(reader)
+			strm.AddReader(r)
 
 			return nil
 		},
@@ -131,12 +130,8 @@ func TestToStream(t *testing.T) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	select {
-	case <-done:
-	case err := <-c.Wait():
-		t.Error(err.Error())
-	}
+	<-done
 
-	strm.RemoveReader(reader)
+	strm.RemoveReader(r)
 	strm.Close()
 }

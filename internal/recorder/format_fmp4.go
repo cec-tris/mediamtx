@@ -3,9 +3,10 @@ package recorder
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"time"
 
-	rtspformat "github.com/bluenviron/gortsplib/v4/pkg/format"
+	rtspformat "github.com/bluenviron/gortsplib/v5/pkg/format"
 	"github.com/bluenviron/mediacommon/v2/pkg/codecs/ac3"
 	"github.com/bluenviron/mediacommon/v2/pkg/codecs/av1"
 	"github.com/bluenviron/mediacommon/v2/pkg/codecs/g711"
@@ -18,12 +19,17 @@ import (
 	"github.com/bluenviron/mediacommon/v2/pkg/codecs/opus"
 	"github.com/bluenviron/mediacommon/v2/pkg/codecs/vp9"
 	"github.com/bluenviron/mediacommon/v2/pkg/formats/fmp4"
+	"github.com/bluenviron/mediacommon/v2/pkg/formats/mp4"
 
+	"github.com/bluenviron/mediamtx/internal/codecprocessor"
 	"github.com/bluenviron/mediamtx/internal/defs"
-	"github.com/bluenviron/mediamtx/internal/formatprocessor"
 	"github.com/bluenviron/mediamtx/internal/logger"
 	"github.com/bluenviron/mediamtx/internal/unit"
 )
+
+var av1DefaultSequenceHeader = []byte{
+	8, 0, 0, 0, 66, 167, 191, 228, 96, 13, 0, 64,
+}
 
 func mpeg1audioChannelCount(cm mpeg1audio.ChannelMode) int {
 	switch cm {
@@ -103,10 +109,8 @@ type formatFMP4 struct {
 
 func (f *formatFMP4) initialize() bool {
 	nextID := 1
-	var setuppedFormats []rtspformat.Format
-	setuppedFormatsMap := make(map[rtspformat.Format]struct{})
 
-	addTrack := func(format rtspformat.Format, codec fmp4.Codec) *formatFMP4Track {
+	addTrack := func(format rtspformat.Format, codec mp4.Codec) *formatFMP4Track {
 		initTrack := &fmp4.InitTrack{
 			TimeScale: uint32(format.ClockRate()),
 			Codec:     codec,
@@ -120,60 +124,49 @@ func (f *formatFMP4) initialize() bool {
 		}
 
 		f.tracks = append(f.tracks, track)
-		setuppedFormats = append(setuppedFormats, format)
-		setuppedFormatsMap[format] = struct{}{}
 		return track
 	}
 
-	updateCodecs := func() {
-		// if codec parameters have been updated,
-		// and current segment has already written codec parameters on disk,
-		// close current segment.
-		if f.currentSegment != nil && f.currentSegment.fi != nil {
-			f.currentSegment.close() //nolint:errcheck
-			f.currentSegment = nil
-		}
-	}
-
-	for _, media := range f.ri.rec.Stream.Desc.Medias {
+	for _, media := range f.ri.stream.Desc.Medias {
 		for _, forma := range media.Formats {
 			clockRate := forma.ClockRate()
 
 			switch forma := forma.(type) {
 			case *rtspformat.AV1:
-				codec := &fmp4.CodecAV1{
-					SequenceHeader: formatprocessor.AV1DefaultSequenceHeader,
+				codec := &mp4.CodecAV1{
+					SequenceHeader: av1DefaultSequenceHeader,
 				}
 				track := addTrack(forma, codec)
 
 				firstReceived := false
 
-				f.ri.rec.Stream.AddReader(
-					f.ri,
+				f.ri.reader.OnData(
 					media,
 					forma,
 					func(u unit.Unit) error {
 						tunit := u.(*unit.AV1)
+
 						if tunit.TU == nil {
 							return nil
 						}
 
 						randomAccess := false
+						paramsChanged := false
 
 						for _, obu := range tunit.TU {
-							var h av1.OBUHeader
-							err := h.Unmarshal(obu)
-							if err != nil {
-								return err
-							}
+							typ := av1.OBUType((obu[0] >> 3) & 0b1111)
 
-							if h.Type == av1.OBUTypeSequenceHeader {
+							if typ == av1.OBUTypeSequenceHeader {
 								if !bytes.Equal(codec.SequenceHeader, obu) {
 									codec.SequenceHeader = obu
-									updateCodecs()
+									paramsChanged = true
 								}
 								randomAccess = true
 							}
+						}
+
+						if paramsChanged {
+							f.updateCodecParams()
 						}
 
 						if !firstReceived {
@@ -183,21 +176,21 @@ func (f *formatFMP4) initialize() bool {
 							firstReceived = true
 						}
 
-						var sampl fmp4.PartSample
+						var sampl fmp4.Sample
 						err := sampl.FillAV1(tunit.TU)
 						if err != nil {
 							return err
 						}
 
 						return track.write(&sample{
-							PartSample: &sampl,
-							dts:        tunit.PTS,
-							ntp:        tunit.NTP,
+							Sample: &sampl,
+							dts:    tunit.PTS,
+							ntp:    tunit.NTP,
 						})
 					})
 
 			case *rtspformat.VP9:
-				codec := &fmp4.CodecVP9{
+				codec := &mp4.CodecVP9{
 					Width:             1280,
 					Height:            720,
 					Profile:           1,
@@ -209,12 +202,12 @@ func (f *formatFMP4) initialize() bool {
 
 				firstReceived := false
 
-				f.ri.rec.Stream.AddReader(
-					f.ri,
+				f.ri.reader.OnData(
 					media,
 					forma,
 					func(u unit.Unit) error {
 						tunit := u.(*unit.VP9)
+
 						if tunit.Frame == nil {
 							return nil
 						}
@@ -226,34 +219,39 @@ func (f *formatFMP4) initialize() bool {
 						}
 
 						randomAccess := false
+						paramsChanged := false
 
 						if !h.NonKeyFrame {
 							randomAccess = true
 
 							if w := h.Width(); codec.Width != w {
 								codec.Width = w
-								updateCodecs()
+								paramsChanged = true
 							}
 							if h := h.Width(); codec.Height != h {
 								codec.Height = h
-								updateCodecs()
+								paramsChanged = true
 							}
 							if codec.Profile != h.Profile {
 								codec.Profile = h.Profile
-								updateCodecs()
+								paramsChanged = true
 							}
 							if codec.BitDepth != h.ColorConfig.BitDepth {
 								codec.BitDepth = h.ColorConfig.BitDepth
-								updateCodecs()
+								paramsChanged = true
 							}
 							if c := h.ChromaSubsampling(); codec.ChromaSubsampling != c {
 								codec.ChromaSubsampling = c
-								updateCodecs()
+								paramsChanged = true
 							}
 							if codec.ColorRange != h.ColorConfig.ColorRange {
 								codec.ColorRange = h.ColorConfig.ColorRange
-								updateCodecs()
+								paramsChanged = true
 							}
+						}
+
+						if paramsChanged {
+							f.updateCodecParams()
 						}
 
 						if !firstReceived {
@@ -264,7 +262,7 @@ func (f *formatFMP4) initialize() bool {
 						}
 
 						return track.write(&sample{
-							PartSample: &fmp4.PartSample{
+							Sample: &fmp4.Sample{
 								IsNonSyncSample: !randomAccess,
 								Payload:         tunit.Frame,
 							},
@@ -278,14 +276,13 @@ func (f *formatFMP4) initialize() bool {
 
 			case *rtspformat.H265:
 				vps, sps, pps := forma.SafeParams()
-
 				if vps == nil || sps == nil || pps == nil {
-					vps = formatprocessor.H265DefaultVPS
-					sps = formatprocessor.H265DefaultSPS
-					pps = formatprocessor.H265DefaultPPS
+					vps = codecprocessor.H265DefaultVPS
+					sps = codecprocessor.H265DefaultSPS
+					pps = codecprocessor.H265DefaultPPS
 				}
 
-				codec := &fmp4.CodecH265{
+				codec := &mp4.CodecH265{
 					VPS: vps,
 					SPS: sps,
 					PPS: pps,
@@ -294,17 +291,18 @@ func (f *formatFMP4) initialize() bool {
 
 				var dtsExtractor *h265.DTSExtractor
 
-				f.ri.rec.Stream.AddReader(
-					f.ri,
+				f.ri.reader.OnData(
 					media,
 					forma,
 					func(u unit.Unit) error {
 						tunit := u.(*unit.H265)
+
 						if tunit.AU == nil {
 							return nil
 						}
 
 						randomAccess := false
+						paramsChanged := false
 
 						for _, nalu := range tunit.AU {
 							typ := h265.NALUType((nalu[0] >> 1) & 0b111111)
@@ -313,24 +311,28 @@ func (f *formatFMP4) initialize() bool {
 							case h265.NALUType_VPS_NUT:
 								if !bytes.Equal(codec.VPS, nalu) {
 									codec.VPS = nalu
-									updateCodecs()
+									paramsChanged = true
 								}
 
 							case h265.NALUType_SPS_NUT:
 								if !bytes.Equal(codec.SPS, nalu) {
 									codec.SPS = nalu
-									updateCodecs()
+									paramsChanged = true
 								}
 
 							case h265.NALUType_PPS_NUT:
 								if !bytes.Equal(codec.PPS, nalu) {
 									codec.PPS = nalu
-									updateCodecs()
+									paramsChanged = true
 								}
 
 							case h265.NALUType_IDR_W_RADL, h265.NALUType_IDR_N_LP, h265.NALUType_CRA_NUT:
 								randomAccess = true
 							}
+						}
+
+						if paramsChanged {
+							f.updateCodecParams()
 						}
 
 						if dtsExtractor == nil {
@@ -346,7 +348,7 @@ func (f *formatFMP4) initialize() bool {
 							return err
 						}
 
-						var sampl fmp4.PartSample
+						var sampl fmp4.Sample
 						err = sampl.FillH265(
 							int32(tunit.PTS-dts),
 							tunit.AU)
@@ -355,21 +357,20 @@ func (f *formatFMP4) initialize() bool {
 						}
 
 						return track.write(&sample{
-							PartSample: &sampl,
-							dts:        dts,
-							ntp:        tunit.NTP,
+							Sample: &sampl,
+							dts:    dts,
+							ntp:    tunit.NTP,
 						})
 					})
 
 			case *rtspformat.H264:
 				sps, pps := forma.SafeParams()
-
 				if sps == nil || pps == nil {
-					sps = formatprocessor.H264DefaultSPS
-					pps = formatprocessor.H264DefaultPPS
+					sps = codecprocessor.H264DefaultSPS
+					pps = codecprocessor.H264DefaultPPS
 				}
 
-				codec := &fmp4.CodecH264{
+				codec := &mp4.CodecH264{
 					SPS: sps,
 					PPS: pps,
 				}
@@ -377,17 +378,18 @@ func (f *formatFMP4) initialize() bool {
 
 				var dtsExtractor *h264.DTSExtractor
 
-				f.ri.rec.Stream.AddReader(
-					f.ri,
+				f.ri.reader.OnData(
 					media,
 					forma,
 					func(u unit.Unit) error {
 						tunit := u.(*unit.H264)
+
 						if tunit.AU == nil {
 							return nil
 						}
 
 						randomAccess := false
+						paramsChanged := false
 
 						for _, nalu := range tunit.AU {
 							typ := h264.NALUType(nalu[0] & 0x1F)
@@ -395,18 +397,22 @@ func (f *formatFMP4) initialize() bool {
 							case h264.NALUTypeSPS:
 								if !bytes.Equal(codec.SPS, nalu) {
 									codec.SPS = nalu
-									updateCodecs()
+									paramsChanged = true
 								}
 
 							case h264.NALUTypePPS:
 								if !bytes.Equal(codec.PPS, nalu) {
 									codec.PPS = nalu
-									updateCodecs()
+									paramsChanged = true
 								}
 
 							case h264.NALUTypeIDR:
 								randomAccess = true
 							}
+						}
+
+						if paramsChanged {
+							f.updateCodecParams()
 						}
 
 						if dtsExtractor == nil {
@@ -422,7 +428,7 @@ func (f *formatFMP4) initialize() bool {
 							return err
 						}
 
-						var sampl fmp4.PartSample
+						var sampl fmp4.Sample
 						err = sampl.FillH264(
 							int32(tunit.PTS-dts),
 							tunit.AU)
@@ -431,9 +437,9 @@ func (f *formatFMP4) initialize() bool {
 						}
 
 						return track.write(&sample{
-							PartSample: &sampl,
-							dts:        dts,
-							ntp:        tunit.NTP,
+							Sample: &sampl,
+							dts:    dts,
+							ntp:    tunit.NTP,
 						})
 					})
 
@@ -441,10 +447,10 @@ func (f *formatFMP4) initialize() bool {
 				config := forma.SafeParams()
 
 				if config == nil {
-					config = formatprocessor.MPEG4VideoDefaultConfig
+					config = codecprocessor.MPEG4VideoDefaultConfig
 				}
 
-				codec := &fmp4.CodecMPEG4Video{
+				codec := &mp4.CodecMPEG4Video{
 					Config: config,
 				}
 				track := addTrack(forma, codec)
@@ -452,12 +458,12 @@ func (f *formatFMP4) initialize() bool {
 				firstReceived := false
 				var lastPTS int64
 
-				f.ri.rec.Stream.AddReader(
-					f.ri,
+				f.ri.reader.OnData(
 					media,
 					forma,
 					func(u unit.Unit) error {
 						tunit := u.(*unit.MPEG4Video)
+
 						if tunit.Frame == nil {
 							return nil
 						}
@@ -467,11 +473,11 @@ func (f *formatFMP4) initialize() bool {
 						if bytes.HasPrefix(tunit.Frame, []byte{0, 0, 1, byte(mpeg4video.VisualObjectSequenceStartCode)}) {
 							end := bytes.Index(tunit.Frame[4:], []byte{0, 0, 1, byte(mpeg4video.GroupOfVOPStartCode)})
 							if end >= 0 {
-								config := tunit.Frame[:end+4]
+								config2 := tunit.Frame[:end+4]
 
-								if !bytes.Equal(codec.Config, config) {
-									codec.Config = config
-									updateCodecs()
+								if !bytes.Equal(codec.Config, config2) {
+									codec.Config = config2
+									f.updateCodecParams()
 								}
 							}
 						}
@@ -487,7 +493,7 @@ func (f *formatFMP4) initialize() bool {
 						lastPTS = tunit.PTS
 
 						return track.write(&sample{
-							PartSample: &fmp4.PartSample{
+							Sample: &fmp4.Sample{
 								Payload:         tunit.Frame,
 								IsNonSyncSample: !randomAccess,
 							},
@@ -497,20 +503,20 @@ func (f *formatFMP4) initialize() bool {
 					})
 
 			case *rtspformat.MPEG1Video:
-				codec := &fmp4.CodecMPEG1Video{
-					Config: formatprocessor.MPEG1VideoDefaultConfig,
+				codec := &mp4.CodecMPEG1Video{
+					Config: codecprocessor.MPEG1VideoDefaultConfig,
 				}
 				track := addTrack(forma, codec)
 
 				firstReceived := false
 				var lastPTS int64
 
-				f.ri.rec.Stream.AddReader(
-					f.ri,
+				f.ri.reader.OnData(
 					media,
 					forma,
 					func(u unit.Unit) error {
 						tunit := u.(*unit.MPEG1Video)
+
 						if tunit.Frame == nil {
 							return nil
 						}
@@ -524,7 +530,7 @@ func (f *formatFMP4) initialize() bool {
 
 								if !bytes.Equal(codec.Config, config) {
 									codec.Config = config
-									updateCodecs()
+									f.updateCodecParams()
 								}
 							}
 						}
@@ -540,7 +546,7 @@ func (f *formatFMP4) initialize() bool {
 						lastPTS = tunit.PTS
 
 						return track.write(&sample{
-							PartSample: &fmp4.PartSample{
+							Sample: &fmp4.Sample{
 								Payload:         tunit.Frame,
 								IsNonSyncSample: !randomAccess,
 							},
@@ -550,7 +556,7 @@ func (f *formatFMP4) initialize() bool {
 					})
 
 			case *rtspformat.MJPEG:
-				codec := &fmp4.CodecMJPEG{
+				codec := &mp4.CodecMJPEG{
 					Width:  800,
 					Height: 600,
 				}
@@ -558,12 +564,12 @@ func (f *formatFMP4) initialize() bool {
 
 				parsed := false
 
-				f.ri.rec.Stream.AddReader(
-					f.ri,
+				f.ri.reader.OnData(
 					media,
 					forma,
 					func(u unit.Unit) error {
 						tunit := u.(*unit.MJPEG)
+
 						if tunit.Frame == nil {
 							return nil
 						}
@@ -576,11 +582,11 @@ func (f *formatFMP4) initialize() bool {
 							}
 							codec.Width = width
 							codec.Height = height
-							updateCodecs()
+							f.updateCodecParams()
 						}
 
 						return track.write(&sample{
-							PartSample: &fmp4.PartSample{
+							Sample: &fmp4.Sample{
 								Payload: tunit.Frame,
 							},
 							dts: tunit.PTS,
@@ -589,17 +595,17 @@ func (f *formatFMP4) initialize() bool {
 					})
 
 			case *rtspformat.Opus:
-				codec := &fmp4.CodecOpus{
+				codec := &mp4.CodecOpus{
 					ChannelCount: forma.ChannelCount,
 				}
 				track := addTrack(forma, codec)
 
-				f.ri.rec.Stream.AddReader(
-					f.ri,
+				f.ri.reader.OnData(
 					media,
 					forma,
 					func(u unit.Unit) error {
 						tunit := u.(*unit.Opus)
+
 						if tunit.Packets == nil {
 							return nil
 						}
@@ -608,7 +614,7 @@ func (f *formatFMP4) initialize() bool {
 
 						for _, packet := range tunit.Packets {
 							err := track.write(&sample{
-								PartSample: &fmp4.PartSample{
+								Sample: &fmp4.Sample{
 									Payload: packet,
 								},
 								dts: pts,
@@ -625,44 +631,75 @@ func (f *formatFMP4) initialize() bool {
 					})
 
 			case *rtspformat.MPEG4Audio:
-				co := forma.GetConfig()
-				if co != nil {
-					codec := &fmp4.CodecMPEG4Audio{
-						Config: *co,
+				codec := &mp4.CodecMPEG4Audio{
+					Config: *forma.Config,
+				}
+				track := addTrack(forma, codec)
+
+				f.ri.reader.OnData(
+					media,
+					forma,
+					func(u unit.Unit) error {
+						tunit := u.(*unit.MPEG4Audio)
+
+						if tunit.AUs == nil {
+							return nil
+						}
+
+						for i, au := range tunit.AUs {
+							pts := tunit.PTS + int64(i)*mpeg4audio.SamplesPerAccessUnit
+
+							err := track.write(&sample{
+								Sample: &fmp4.Sample{
+									Payload: au,
+								},
+								dts: pts,
+								ntp: tunit.NTP.Add(timestampToDuration(pts-tunit.PTS, clockRate)),
+							})
+							if err != nil {
+								return err
+							}
+						}
+
+						return nil
+					})
+
+			case *rtspformat.MPEG4AudioLATM:
+				if !forma.CPresent {
+					codec := &mp4.CodecMPEG4Audio{
+						Config: *forma.StreamMuxConfig.Programs[0].Layers[0].AudioSpecificConfig,
 					}
 					track := addTrack(forma, codec)
 
-					f.ri.rec.Stream.AddReader(
-						f.ri,
+					f.ri.reader.OnData(
 						media,
 						forma,
 						func(u unit.Unit) error {
-							tunit := u.(*unit.MPEG4Audio)
-							if tunit.AUs == nil {
+							tunit := u.(*unit.MPEG4AudioLATM)
+
+							if tunit.Element == nil {
 								return nil
 							}
 
-							for i, au := range tunit.AUs {
-								pts := tunit.PTS + int64(i)*mpeg4audio.SamplesPerAccessUnit
-
-								err := track.write(&sample{
-									PartSample: &fmp4.PartSample{
-										Payload: au,
-									},
-									dts: pts,
-									ntp: tunit.NTP.Add(timestampToDuration(pts-tunit.PTS, clockRate)),
-								})
-								if err != nil {
-									return err
-								}
+							var ame mpeg4audio.AudioMuxElement
+							ame.StreamMuxConfig = forma.StreamMuxConfig
+							err := ame.Unmarshal(tunit.Element)
+							if err != nil {
+								return err
 							}
 
-							return nil
+							return track.write(&sample{
+								Sample: &fmp4.Sample{
+									Payload: ame.Payloads[0][0][0],
+								},
+								dts: tunit.PTS,
+								ntp: tunit.NTP,
+							})
 						})
 				}
 
 			case *rtspformat.MPEG1Audio:
-				codec := &fmp4.CodecMPEG1Audio{
+				codec := &mp4.CodecMPEG1Audio{
 					SampleRate:   32000,
 					ChannelCount: 2,
 				}
@@ -670,12 +707,12 @@ func (f *formatFMP4) initialize() bool {
 
 				parsed := false
 
-				f.ri.rec.Stream.AddReader(
-					f.ri,
+				f.ri.reader.OnData(
 					media,
 					forma,
 					func(u unit.Unit) error {
 						tunit := u.(*unit.MPEG1Audio)
+
 						if tunit.Frames == nil {
 							return nil
 						}
@@ -693,11 +730,11 @@ func (f *formatFMP4) initialize() bool {
 								parsed = true
 								codec.SampleRate = h.SampleRate
 								codec.ChannelCount = mpeg1audioChannelCount(h.ChannelMode)
-								updateCodecs()
+								f.updateCodecParams()
 							}
 
 							err = track.write(&sample{
-								PartSample: &fmp4.PartSample{
+								Sample: &fmp4.Sample{
 									Payload: frame,
 								},
 								dts: tunit.PTS + tunit.PTS,
@@ -715,7 +752,7 @@ func (f *formatFMP4) initialize() bool {
 					})
 
 			case *rtspformat.AC3:
-				codec := &fmp4.CodecAC3{
+				codec := &mp4.CodecAC3{
 					SampleRate:   forma.SampleRate,
 					ChannelCount: forma.ChannelCount,
 					Fscod:        0,
@@ -729,12 +766,12 @@ func (f *formatFMP4) initialize() bool {
 
 				parsed := false
 
-				f.ri.rec.Stream.AddReader(
-					f.ri,
+				f.ri.reader.OnData(
 					media,
 					forma,
 					func(u unit.Unit) error {
 						tunit := u.(*unit.AC3)
+
 						if tunit.Frames == nil {
 							return nil
 						}
@@ -762,13 +799,13 @@ func (f *formatFMP4) initialize() bool {
 								codec.Acmod = bsi.Acmod
 								codec.LfeOn = bsi.LfeOn
 								codec.BitRateCode = syncInfo.Frmsizecod >> 1
-								updateCodecs()
+								f.updateCodecParams()
 							}
 
 							pts := tunit.PTS + int64(i)*ac3.SamplesPerFrame
 
 							err = track.write(&sample{
-								PartSample: &fmp4.PartSample{
+								Sample: &fmp4.Sample{
 									Payload: frame,
 								},
 								dts: pts,
@@ -786,7 +823,7 @@ func (f *formatFMP4) initialize() bool {
 				// TODO
 
 			case *rtspformat.G711:
-				codec := &fmp4.CodecLPCM{
+				codec := &mp4.CodecLPCM{
 					LittleEndian: false,
 					BitDepth:     16,
 					SampleRate:   forma.SampleRate,
@@ -794,8 +831,7 @@ func (f *formatFMP4) initialize() bool {
 				}
 				track := addTrack(forma, codec)
 
-				f.ri.rec.Stream.AddReader(
-					f.ri,
+				f.ri.reader.OnData(
 					media,
 					forma,
 					func(u unit.Unit) error {
@@ -817,7 +853,7 @@ func (f *formatFMP4) initialize() bool {
 						}
 
 						return track.write(&sample{
-							PartSample: &fmp4.PartSample{
+							Sample: &fmp4.Sample{
 								Payload: lpcm,
 							},
 							dts: tunit.PTS,
@@ -826,7 +862,7 @@ func (f *formatFMP4) initialize() bool {
 					})
 
 			case *rtspformat.LPCM:
-				codec := &fmp4.CodecLPCM{
+				codec := &mp4.CodecLPCM{
 					LittleEndian: false,
 					BitDepth:     forma.BitDepth,
 					SampleRate:   forma.SampleRate,
@@ -834,18 +870,18 @@ func (f *formatFMP4) initialize() bool {
 				}
 				track := addTrack(forma, codec)
 
-				f.ri.rec.Stream.AddReader(
-					f.ri,
+				f.ri.reader.OnData(
 					media,
 					forma,
 					func(u unit.Unit) error {
 						tunit := u.(*unit.LPCM)
+
 						if tunit.Samples == nil {
 							return nil
 						}
 
 						return track.write(&sample{
-							PartSample: &fmp4.PartSample{
+							Sample: &fmp4.Sample{
 								Payload: tunit.Samples,
 							},
 							dts: tunit.PTS,
@@ -856,15 +892,17 @@ func (f *formatFMP4) initialize() bool {
 		}
 	}
 
-	if len(setuppedFormats) == 0 {
+	if len(f.tracks) == 0 {
 		f.ri.Log(logger.Warn, "no supported tracks found, skipping recording")
 		return false
 	}
 
+	setuppedFormats := f.ri.reader.Formats()
+
 	n := 1
-	for _, medi := range f.ri.rec.Stream.Desc.Medias {
+	for _, medi := range f.ri.stream.Desc.Medias {
 		for _, forma := range medi.Formats {
-			if _, ok := setuppedFormatsMap[forma]; !ok {
+			if !slices.Contains(setuppedFormats, forma) {
 				f.ri.Log(logger.Warn, "skipping track %d (%s)", n, forma.Codec())
 			}
 			n++
@@ -877,15 +915,12 @@ func (f *formatFMP4) initialize() bool {
 	return true
 }
 
+func (f *formatFMP4) updateCodecParams() {
+	f.ri.Log(logger.Debug, "codec parameters have changed")
+}
+
 func (f *formatFMP4) close() {
 	if f.currentSegment != nil {
-		for _, track := range f.tracks {
-			if track.nextSample != nil &&
-				timestampToDuration(track.nextSample.dts, int(track.initTrack.TimeScale)) > f.currentSegment.lastDTS {
-				f.currentSegment.lastDTS = timestampToDuration(track.nextSample.dts, int(track.initTrack.TimeScale))
-			}
-		}
-
 		f.currentSegment.close() //nolint:errcheck
 	}
 }
